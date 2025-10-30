@@ -24,17 +24,25 @@ project(DoisCores C CXX ASM)
 pico_sdk_init()
 
 add_executable(${PROJECT_NAME}  
-        Pisca_LEDs_2Cores.c 
+        # Pisca_LEDs_2Cores.c 
+        ${CMAKE_CURRENT_LIST_DIR}/libs/ssd1306.c
+        #${CMAKE_CURRENT_LIST_DIR}/libs/mpu6050.c
         # Prints_2Cores.c
         # ADC_2Cores.c
-        #ADC_2Cores_IRQ.c
+        ADC_2Cores_IRQ.c
         )
 
 target_link_libraries(${PROJECT_NAME} 
         pico_stdlib 
         pico_multicore
         hardware_adc
+        hardware_i2c
         )
+
+# Adiciona os diretórios de inclusão para o compilador encontrar os .h
+target_include_directories(${PROJECT_NAME} PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/libs      # Diretório das suas bibliotecas (ssd1306.h, etc.)
+)
 
 pico_enable_stdio_usb(${PROJECT_NAME} 1)
 pico_enable_stdio_uart(${PROJECT_NAME} 0)
