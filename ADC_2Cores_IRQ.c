@@ -9,17 +9,26 @@
 //#include "libs/mpu6050.h"
 
 #define INTERVALO_MS 500
-// Endereço I2C do MPU6050
+// Endereço I2C do MPU6050 & BMP280
 #define I2C_PORT i2c0               // i2c0 pinos 0 e 1, i2c1 pinos 2 e 3
 #define I2C_SDA 0                   // 0 ou 2
 #define I2C_SCL 1                  // 1 ou 3
               
+#define LED_RED 13
+#define LED_BLUE 12
+
+// Enum para controlar a coleta de dados do sensores - Alternar leitura
+typedef enum ESCOLHA_SENSORES {
+    MPU,
+    BMP
+}ESCOLHA_SENSORES_T;
 
 // Variáveis Globais
 ssd1306_t ssd;      // Struct para inicialização do display
 static int addr = 0x68;             // O endereço padrao deste IMU é o 0x68
 int8_t cont = 0;            // Contador para fazer um MUX entre a leitura dos dois sensores
 struct bmp280_calib_param params;   // Estrutura para armazenar os parâmetros de calibração do BMP280
+ESCOLHA_SENSORES_T MUX = MPU;             // Estrutura para escolher entre as leituras dos sensores da FIFO 
 
 // Funções para Inicialização do MPU6050
 static void mpu6050_reset() {
@@ -82,12 +91,14 @@ void core1_interrupt_handler()
             ssd1306_rect(&ssd, 3, 3, 122, 60, true, false);       // Desenha um retângulo
             char texto[32];
 
-        if(!cont){
+        if(MUX == MPU){
             val /= 16384.0f;        // Conversão do valor da aceleração
             printf("Core 1 (IRQ): Valor RECEBIDO do Core 0 - MPU: %.2f\n", val);
-            cont++;
+            MUX = BMP;
 
-            
+            gpio_put(LED_RED, true);
+            gpio_put(LED_BLUE, false);
+
             sprintf(texto, "Accel X: %.2f", val);
             ssd1306_draw_string(&ssd, texto, centralizar_texto(texto), 20);
             ssd1306_send_data(&ssd);
@@ -96,8 +107,11 @@ void core1_interrupt_handler()
             val /= 100.0f;         // Conversão do valor da temperatura
 
             printf("Core 1 (IRQ): Valor RECEBIDO do Core 0 - BMP: %.0f\n", val);
-            cont = 0;
+            MUX = MPU;
 
+            gpio_put(LED_RED, false);
+            gpio_put(LED_BLUE, true);
+            
             sprintf(texto, "Temp: %.1f C", val);
             ssd1306_draw_string(&ssd, texto, centralizar_texto(texto), 40);
             ssd1306_send_data(&ssd);
@@ -130,6 +144,15 @@ void gpio_irq_handler(uint gpio, uint32_t events){
 }
 
 void setup(){
+    // Inicialização dos LED's
+    gpio_init(LED_RED);
+    gpio_set_dir(LED_RED, GPIO_OUT);
+    gpio_put(LED_RED, false);
+
+    gpio_init(LED_BLUE);
+    gpio_set_dir(LED_BLUE, GPIO_OUT);
+    gpio_put(LED_RED, false);
+
     // Para ser utilizado o modo BOOTSEL com botão B
     gpio_init(botaoB);
     gpio_set_dir(botaoB, GPIO_IN);
