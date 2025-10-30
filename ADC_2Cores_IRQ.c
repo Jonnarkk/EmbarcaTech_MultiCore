@@ -78,6 +78,13 @@ void core1_interrupt_handler()
             val /= 16384.0f;        // Conversão do valor da aceleração
             printf("Core 1 (IRQ): Valor RECEBIDO do Core 0: %.2f\n", val);
             cont++;
+
+            // === Atualiza o display aqui ===
+            ssd1306_fill(&ssd, false);  // limpa tela
+            char texto[32];
+            sprintf(texto, "Accel X: %.2f", val);
+            ssd1306_draw_string(&ssd, texto, centralizar_texto(texto), 20);
+            ssd1306_send_data(&ssd);
         }
         else{
             printf("Core 1 (IRQ): Valor RECEBIDO do Core 0: %.0f\n", val);
@@ -102,8 +109,10 @@ void core1_entry()
 // Trecho para modo BOOTSEL com botão B
 #include "pico/bootrom.h"
 #define botaoB 6
-void gpio_irq_handler(uint gpio, uint32_t events)
-{
+void gpio_irq_handler(uint gpio, uint32_t events){
+
+    ssd1306_fill(&ssd, false);
+    ssd1306_send_data(&ssd);
     reset_usb_boot(0, 0);
 }
 
