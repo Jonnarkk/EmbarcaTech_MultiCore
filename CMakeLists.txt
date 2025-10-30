@@ -26,6 +26,7 @@ pico_sdk_init()
 add_executable(${PROJECT_NAME}  
         # Pisca_LEDs_2Cores.c 
         ${CMAKE_CURRENT_LIST_DIR}/libs/ssd1306.c
+        ${CMAKE_CURRENT_LIST_DIR}/libs/bmp280.c
         #${CMAKE_CURRENT_LIST_DIR}/libs/mpu6050.c
         # Prints_2Cores.c
         # ADC_2Cores.c

@@ -4,10 +4,11 @@
 #include "hardware/adc.h"
 #include "hardware/i2c.h"
 #include "libs/ssd1306.h"
+#include "libs/bmp280.h"
 #include "pico/binary_info.h"
 //#include "libs/mpu6050.h"
 
-#define INTERVALO_MS 200
+#define INTERVALO_MS 500
 // Endereço I2C do MPU6050
 #define I2C_PORT i2c0               // i2c0 pinos 0 e 1, i2c1 pinos 2 e 3
 #define I2C_SDA 0                   // 0 ou 2
@@ -18,6 +19,7 @@
 ssd1306_t ssd;      // Struct para inicialização do display
 static int addr = 0x68;             // O endereço padrao deste IMU é o 0x68
 int8_t cont = 0;            // Contador para fazer um MUX entre a leitura dos dois sensores
+struct bmp280_calib_param params;   // Estrutura para armazenar os parâmetros de calibração do BMP280
 
 // Funções para Inicialização do MPU6050
 static void mpu6050_reset() {
@@ -74,21 +76,31 @@ void core1_interrupt_handler()
     while (multicore_fifo_rvalid()){
 
         float val = multicore_fifo_pop_blocking(); // Recebe dado do Core 0     
+
+        // === Atualiza o display aqui ===
+            ssd1306_fill(&ssd, false);  // limpa tela
+            ssd1306_rect(&ssd, 3, 3, 122, 60, true, false);       // Desenha um retângulo
+            char texto[32];
+
         if(!cont){
             val /= 16384.0f;        // Conversão do valor da aceleração
-            printf("Core 1 (IRQ): Valor RECEBIDO do Core 0: %.2f\n", val);
+            printf("Core 1 (IRQ): Valor RECEBIDO do Core 0 - MPU: %.2f\n", val);
             cont++;
 
-            // === Atualiza o display aqui ===
-            ssd1306_fill(&ssd, false);  // limpa tela
-            char texto[32];
+            
             sprintf(texto, "Accel X: %.2f", val);
             ssd1306_draw_string(&ssd, texto, centralizar_texto(texto), 20);
             ssd1306_send_data(&ssd);
         }
         else{
-            printf("Core 1 (IRQ): Valor RECEBIDO do Core 0: %.0f\n", val);
+            val /= 100.0f;         // Conversão do valor da temperatura
+
+            printf("Core 1 (IRQ): Valor RECEBIDO do Core 0 - BMP: %.0f\n", val);
             cont = 0;
+
+            sprintf(texto, "Temp: %.1f C", val);
+            ssd1306_draw_string(&ssd, texto, centralizar_texto(texto), 40);
+            ssd1306_send_data(&ssd);
         }
     }
 
@@ -111,6 +123,7 @@ void core1_entry()
 #define botaoB 6
 void gpio_irq_handler(uint gpio, uint32_t events){
 
+    // Reinicia a placa e limpa o display
     ssd1306_fill(&ssd, false);
     ssd1306_send_data(&ssd);
     reset_usb_boot(0, 0);
@@ -138,6 +151,10 @@ void setup(){
     bi_decl(bi_2pins_with_func(I2C_SDA, I2C_SCL, GPIO_FUNC_I2C));
     printf("Antes do reset MPU...\n");
     mpu6050_reset();
+
+     // Inicializa o BMP280
+    bmp280_init(I2C_PORT);
+    bmp280_get_calib_params(I2C_PORT, &params);
 }
 
 int main(){
@@ -148,8 +165,12 @@ int main(){
 
     multicore_launch_core1(core1_entry);
 
-    // Variáveis para armazenar os dados do sensor
+    // Variáveis para armazenar os dados do sensor MPU
     int16_t acceleration[3], gyro[3], temp;
+
+    // Variáveis para armazenar os dados do sensor BMP280
+    int32_t raw_temp_bmp, raw_pressure;
+
 
     while (true)
     {
@@ -159,8 +180,14 @@ int main(){
         printf("Core 0: Dados do MPU lidos.\n");
         multicore_fifo_push_blocking(acceleration[0]); // Envia para Core 1
         sleep_ms(INTERVALO_MS);
+
+         // Leitura do BMP280
+        bmp280_read_raw(I2C_PORT, &raw_temp_bmp, &raw_pressure);
+        int32_t temperature = bmp280_convert_temp(raw_temp_bmp, &params);
+        int32_t pressure = bmp280_convert_pressure(raw_pressure, raw_temp_bmp, &params);
         
-        multicore_fifo_push_blocking(123);
+        multicore_fifo_push_blocking(temperature); // Envia para Core 1
+        printf("Core 0: Dados do BMP280 lidos.\n");
         sleep_ms(INTERVALO_MS);
     }
 }
