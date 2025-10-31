@@ -86,8 +86,6 @@ void core1_interrupt_handler()
 
         float val = multicore_fifo_pop_blocking(); // Recebe dado do Core 0     
 
-        // === Atualiza o display aqui ===
-            ssd1306_fill(&ssd, false);  // limpa tela
             ssd1306_rect(&ssd, 3, 3, 122, 60, true, false);       // Desenha um retângulo
             char texto[32];
 
