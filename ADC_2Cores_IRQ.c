@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <math.h>
 #include "pico/stdlib.h"
 #include "pico/multicore.h"
 #include "hardware/adc.h"
@@ -29,6 +30,10 @@ static int addr = 0x68;             // O endereço padrao deste IMU é o 0x68
 int8_t cont = 0;            // Contador para fazer um MUX entre a leitura dos dois sensores
 struct bmp280_calib_param params;   // Estrutura para armazenar os parâmetros de calibração do BMP280
 ESCOLHA_SENSORES_T MUX = MPU;             // Estrutura para escolher entre as leituras dos sensores da FIFO 
+// Variáveis globais para armazenar os últimos valores
+volatile float ultimo_roll = 0.0f;
+volatile float ultima_temp = 0.0f;
+volatile bool novo_dado = false;   // indica se há algo novo para atualizar
 
 // Funções para Inicialização do MPU6050
 static void mpu6050_reset() {
@@ -81,42 +86,24 @@ static void mpu6050_reset() {
 
 void core1_interrupt_handler()
 {
-    // É executado quando há dados na FIFO do Core 1
-    while (multicore_fifo_rvalid()){
-
-        float val = multicore_fifo_pop_blocking(); // Recebe dado do Core 0     
-
-            ssd1306_rect(&ssd, 3, 3, 122, 60, true, false);       // Desenha um retângulo
-            char texto[32];
-
-        if(MUX == MPU){
-            val /= 16384.0f;        // Conversão do valor da aceleração
-            printf("Core 1 (IRQ): Valor RECEBIDO do Core 0 - MPU: %.2f\n", val);
+    while (multicore_fifo_rvalid()) {
+        float val = multicore_fifo_pop_blocking(); // recebe dado
+        if (MUX == MPU) {
+            ultimo_roll = val;
             MUX = BMP;
 
             gpio_put(LED_RED, true);
             gpio_put(LED_BLUE, false);
-
-            sprintf(texto, "Accel X: %.2f", val);
-            ssd1306_draw_string(&ssd, texto, centralizar_texto(texto), 20);
-            ssd1306_send_data(&ssd);
-        }
-        else{
-            val /= 100.0f;         // Conversão do valor da temperatura
-
-            printf("Core 1 (IRQ): Valor RECEBIDO do Core 0 - BMP: %.0f\n", val);
+        } else {
+            ultima_temp = val / 100.0f;
             MUX = MPU;
 
             gpio_put(LED_RED, false);
             gpio_put(LED_BLUE, true);
-            
-            sprintf(texto, "Temp: %.1f C", val);
-            ssd1306_draw_string(&ssd, texto, centralizar_texto(texto), 40);
-            ssd1306_send_data(&ssd);
         }
+        novo_dado = true; // sinaliza que tem atualização
     }
-
-    multicore_fifo_clear_irq(); // Limpa a interrupção
+    multicore_fifo_clear_irq();
 }
 
 void core1_entry()
@@ -124,9 +111,36 @@ void core1_entry()
     multicore_fifo_clear_irq();
     irq_set_exclusive_handler(SIO_IRQ_PROC1, core1_interrupt_handler);
     irq_set_enabled(SIO_IRQ_PROC1, true);
-    while (true)
-    {
-       tight_loop_contents();
+
+    char texto[32];
+
+    while (true) {
+        if (novo_dado) {
+            novo_dado = false;
+
+            // Limpa o buffer antes de redesenhar toda a tela
+            ssd1306_fill(&ssd, false);
+
+            // Moldura opcional
+            ssd1306_rect(&ssd, 3, 3, 122, 60, true, false);
+
+            // Escreve o ROLL
+            sprintf(texto, "ROLL: %.1f", ultimo_roll);
+            ssd1306_draw_string(&ssd, texto, centralizar_texto(texto), 20);
+
+            // Escreve a TEMPERATURA
+            sprintf(texto, "TEMP: %.1f C", ultima_temp);
+            ssd1306_draw_string(&ssd, texto, centralizar_texto(texto), 40);
+
+            // Envia tudo de uma vez
+            ssd1306_send_data(&ssd);
+
+            // Delay para display
+            sleep_ms(50);
+
+        }
+
+        tight_loop_contents();
     }
 }
 
@@ -199,7 +213,16 @@ int main(){
         mpu6050_read_raw(acceleration, gyro, &temp);
         
         printf("Core 0: Dados do MPU lidos.\n");
-        multicore_fifo_push_blocking(acceleration[0]); // Envia para Core 1
+
+        // Leitura dos dados de aceleração, giroscópio e temperatura
+        float ax = acceleration[0] / 16384.0f;
+        float ay = acceleration[1] / 16384.0f;
+        float az = acceleration[2] / 16384.0f;
+
+        // Cálculo do ângulo em graus (Roll)
+        float roll  = atan2(ay, az) * 180.0f / M_PI;
+
+        multicore_fifo_push_blocking(roll); // Envia para Core 1
         sleep_ms(INTERVALO_MS);
 
          // Leitura do BMP280
