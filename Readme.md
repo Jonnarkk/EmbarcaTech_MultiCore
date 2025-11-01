@@ -17,11 +17,4 @@ O programa realiza as seguintes ações:
     * Ao ser interrompido, o *handler* lê o valor dos sensores da FIFO.
     * Imprime os valores no terminal e também exibe-os no display OLED, além de indicar qual sensor foi lido através do LED RGB (Vermelho/MPU - Azul/BMP280).
 
-O principal diferencial é o uso da interrupção (`SIO_IRQ_PROC1`) no Core 1, o que o mantém em *sleep* (`tight_loop_contents()`) até que haja dados, garantindo uma execução mais eficiente e responsiva.
-
-
-
-
-##  Saída Esperada
-
-Ao executar, você deverá ver no terminal (via Serial USB) as mensagens sendo impressas pelos dois cores, demonstrando a comunicação assíncrona:
+O principal diferencial é o uso da interrupção (`SIO_IRQ_PROC1`) no Core 1, que apenas repassa o valor lido dos sensores para uma variável global, permitindo que o Core 1 tenha seu total processamento na exibição dos dados de forma intuitiva para o usuário.
