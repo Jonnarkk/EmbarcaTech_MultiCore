@@ -7,7 +7,6 @@
 #include "libs/ssd1306.h"
 #include "libs/bmp280.h"
 #include "pico/binary_info.h"
-//#include "libs/mpu6050.h"
 
 #define INTERVALO_MS 500
 // Endereço I2C do MPU6050 & BMP280
@@ -30,7 +29,7 @@ static int addr = 0x68;             // O endereço padrao deste IMU é o 0x68
 int8_t cont = 0;            // Contador para fazer um MUX entre a leitura dos dois sensores
 struct bmp280_calib_param params;   // Estrutura para armazenar os parâmetros de calibração do BMP280
 ESCOLHA_SENSORES_T MUX = MPU;             // Estrutura para escolher entre as leituras dos sensores da FIFO 
-// Variáveis globais para armazenar os últimos valores
+// Variáveis para armazenar os últimos valores
 volatile float ultimo_roll = 0.0f;
 volatile float ultima_temp = 0.0f;
 volatile bool novo_dado = false;   // indica se há algo novo para atualizar
